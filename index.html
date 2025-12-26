@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smart Crop QR System - SIH Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin:0; padding:0; font-family:'Poppins', sans-serif; }
+  body { background:#f4f6f8; }
+
+  .container { display:flex; min-height:100vh; }
+  .sidebar { width:220px; background:#2e7d32; color:#fff; display:flex; flex-direction:column; padding:20px; }
+  .sidebar h2 { text-align:center; margin-bottom:30px; font-weight:600; }
+  .sidebar button { margin:10px 0; padding:12px; border:none; border-radius:8px; background:#43a047; color:#fff; cursor:pointer; font-weight:600; transition:0.3s; }
+  .sidebar button:hover { background:#66bb6a; }
+  .main { flex:1; padding:20px; }
+
+  .card { background:#fff; padding:20px; border-radius:12px; margin-bottom:20px; box-shadow:0 6px 15px rgba(0,0,0,0.05); transition:0.3s; }
+  .card:hover { box-shadow:0 10px 20px rgba(0,0,0,0.08); }
+
+  .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .header h1 { color:#2e7d32; }
+  #logoutBtn { background:#c62828; color:#fff; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:600; }
+  #logoutBtn:hover { background:#b71c1c; }
+
+  input, select { width:100%; padding:10px; margin:6px 0; border-radius:6px; border:1px solid #ccc; }
+  button.primary { background:#2e7d32; color:#fff; border-radius:6px; padding:10px 15px; border:none; cursor:pointer; margin-top:8px; font-weight:600; }
+  button.primary:hover { opacity:0.9; }
+  button.danger { background:#c62828; color:#fff; }
+
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th, td { padding:12px; text-align:center; border-bottom:1px solid #eee; }
+  th { background:#2e7d32; color:#fff; }
+  tr:hover { background:#f1f1f1; }
+
+  .verified { color:green; font-weight:600; }
+  .unverified { color:red; font-weight:600; }
+
+  .hidden { display:none; }
+
+  #authBox { max-width:400px; margin:50px auto; background:#fff; padding:25px; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.1); }
+
+  #reader { margin-top:10px; max-width:400px; }
+</style>
+</head>
+<body>
+
+<!-- MAIN LAYOUT -->
+<div class="hidden" id="mainLayout">
+  <div class="container">
+    <div class="sidebar">
+      <h2>Dashboard</h2>
+      <button onclick="showCard('generatorCard')">Generate QR</button>
+      <button onclick="showCard('scannerCard')">Scan QR</button>
+      <button onclick="showCard('detailsCard')">Crop Details</button>
+      <button onclick="showCard('dashboardCard')">My Crops</button>
+      <button id="logoutBtn">Logout</button>
+    </div>
+    <div class="main">
+      <div class="header">
+        <h1>🌾 Smart Crop QR System</h1>
+      </div>
+
+      <!-- QR Generator -->
+      <div class="card" id="generatorCard">
+        <h3>Generate Crop QR</h3>
+        <input id="cropId" placeholder="Crop ID">
+        <input id="cropName" placeholder="Crop Name">
+        <select id="cropType">
+          <option value="">Select Crop Type</option>
+          <option value="Grain">Grain</option>
+          <option value="Vegetable">Vegetable</option>
+          <option value="Fruit">Fruit</option>
+        </select>
+        <input id="farmer" placeholder="Farmer Name" readonly>
+        <input id="location" placeholder="Location">
+        <input id="sowingDate" type="date">
+        <input id="harvestDate" type="date">
+        <input id="quantity" placeholder="Quantity (Kg)">
+        <input id="price" placeholder="Price per Kg">
+        <input id="fertilizer" placeholder="Fertilizer Used">
+        <button id="generateQRBtn" class="primary">Generate QR</button>
+        <div id="qrcode"></div>
+      </div>
+
+      <!-- QR Scanner -->
+      <div class="card hidden" id="scannerCard">
+        <h3>Scan Crop QR</h3>
+        <button id="startScanBtn" class="primary">▶ Start Scan</button>
+        <button id="stopScanBtn" class="danger">⏹ Stop Scan</button>
+        <div id="reader"></div>
+      </div>
+
+      <!-- Crop Details -->
+      <div class="card hidden" id="detailsCard">
+        <h3>Crop Details</h3>
+        <div id="cropDetails">No data</div>
+        <button id="verifyCropBtn" class="primary">✅ Verify Crop</button>
+      </div>
+
+      <!-- Dashboard -->
+      <div class="card hidden" id="dashboardCard">
+        <h3>My Crops</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Crop ID</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Quantity</th>
+              <th>Price</th>
+              <th>Verified</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="cropTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN / CREATE ACCOUNT -->
+<div class="box" id="authBox">
+  <h3>👨‍🌾 Login / Create Account</h3>
+  <input id="authFarmer" placeholder="Farmer Name">
+  <input id="authPassword" type="password" placeholder="Password">
+  <button id="loginBtn" class="primary">Login</button>
+  <button id="createBtn" class="primary">Create Account</button>
+  <div id="authStatus" style="margin-top:10px;"></div>
+</div>
+
+<script>
+let html5QrCode = null;
+let loggedFarmer = "";
+let currentCrop = null;
+
+// Farmer account storage
+const getFarmers = () => JSON.parse(localStorage.getItem('farmers') || '{}');
+const saveFarmers = (farmers) => localStorage.setItem('farmers', JSON.stringify(farmers));
+const getInput = id => document.getElementById(id).value.trim();
+
+// Card toggle
+function showCard(id){
+  ['generatorCard','scannerCard','detailsCard','dashboardCard'].forEach(c=>document.getElementById(c).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+// Account management
+function createAccount(){
+  const name = getInput("authFarmer");
+  const password = getInput("authPassword");
+  if(!name||!password) return alert("Enter username & password");
+  const farmers = getFarmers();
+  if(farmers[name]) return alert("Farmer exists");
+  farmers[name] = password;
+  saveFarmers(farmers);
+  alert("✅ Account created successfully!");
+}
+
+function loginFarmer(){
+  const name = getInput("authFarmer");
+  const password = getInput("authPassword");
+  if(!name||!password) return alert("Enter username & password");
+  const farmers = getFarmers();
+  if(farmers[name] && farmers[name]===password){
+    loggedFarmer=name;
+    document.getElementById("farmer").value=loggedFarmer;
+    document.getElementById("authBox").classList.add("hidden");
+    document.getElementById("mainLayout").classList.remove("hidden");
+    updateDashboard();
+    showCard('generatorCard');
+  } else alert("❌ Invalid username or password");
+}
+
+function logoutFarmer(){
+  loggedFarmer="";
+  currentCrop=null;
+  document.getElementById("mainLayout").classList.add("hidden");
+  document.getElementById("authBox").classList.remove("hidden");
+  document.getElementById("authFarmer").value="";
+  document.getElementById("authPassword").value="";
+  document.getElementById("cropDetails").innerHTML="No data";
+  document.getElementById("qrcode").innerHTML="";
+}
+
+// QR generation
+function generateQR(){
+  const crop={
+    id:getInput("cropId"),
+    name:getInput("cropName"),
+    type:document.getElementById("cropType").value,
+    farmer:loggedFarmer,
+    location:getInput("location"),
+    sowingDate:document.getElementById("sowingDate").value,
+    harvestDate:document.getElementById("harvestDate").value,
+    quantity:getInput("quantity"),
+    price:getInput("price"),
+    fertilizer:getInput("fertilizer"),
+    verified:false
+  };
+  if(!crop.id||!crop.name) return alert("Crop ID & Name required");
+  // save full crop
+  localStorage.setItem(`crop_${loggedFarmer}_${crop.id}`,JSON.stringify(crop));
+  // QR only minimal
+  renderQRCode({id:crop.id,farmer:loggedFarmer});
+  updateDashboard();
+}
+
+function renderQRCode(data){
+  const el=document.getElementById("qrcode");
+  el.innerHTML="";
+  new QRCode(el,{text:JSON.stringify(data),width:200,height:200,correctLevel:QRCode.CorrectLevel.H});
+}
+
+// Scanner
+function startScanner(){
+  if(html5QrCode) return;
+  html5QrCode=new Html5Qrcode("reader");
+  html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:250},
+    decodedText=>{
+      stopScanner();
+      try{
+        const scanned=JSON.parse(decodedText);
+        const stored=localStorage.getItem(`crop_${scanned.farmer}_${scanned.id}`);
+        if(!stored) return alert("Crop not found!");
+        currentCrop=JSON.parse(stored);
+        showCrop(currentCrop);
+        showCard('detailsCard');
+      } catch{ document.getElementById("cropDetails").innerHTML="❌ Invalid QR"; }
+    }).catch(err=>alert("Camera error:"+err));
+}
+
+function stopScanner(){ if(!html5QrCode) return; html5QrCode.stop().then(()=>{ html5QrCode.clear(); html5QrCode=null; }); }
+
+function showCrop(crop){
+  document.getElementById("cropDetails").innerHTML=`
+    🌱 <b>${crop.name}</b> (${crop.type})<br>
+    ⚖ Quantity: ${crop.quantity || "N/A"} Kg<br>
+    💰 Price: ₹${crop.price || "N/A"}<br>
+    🧑‍🌾 Farmer: ${crop.farmer}<br>
+    📍 Location: ${crop.location || "N/A"}<br>
+    🌾 Sowing: ${crop.sowingDate || "N/A"}<br>
+    🌽 Harvest: ${crop.harvestDate || "N/A"}<br>
+    🧪 Fertilizer: ${crop.fertilizer || "N/A"}<br>
+    ${crop.verified?"🟢 Verified":"🔴 Not Verified"}
+  `;
+}
+
+function verifyCrop(){
+  if(!currentCrop) return alert("Scan a crop first");
+  currentCrop.verified=true;
+  localStorage.setItem(`crop_${currentCrop.farmer}_${currentCrop.id}`,JSON.stringify(currentCrop));
+  showCrop(currentCrop);
+  updateDashboard();
+}
+
+function updateDashboard(){
+  const tbody=document.getElementById("cropTableBody");
+  tbody.innerHTML="";
+  Object.keys(localStorage).filter(k=>k.startsWith(`crop_${loggedFarmer}_`)).forEach(key=>{
+    const crop=JSON.parse(localStorage.getItem(key));
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${crop.id}</td>
+      <td>${crop.name}</td>
+      <td>${crop.type}</td>
+      <td>${crop.quantity}</td>
+      <td>₹${crop.price}</td>
+      <td class="${crop.verified?'verified':'unverified'}">${crop.verified?"✅":"❌"}</td>
+      <td><button onclick='editCrop("${key}")' class="primary">Edit</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function editCrop(key){
+  const crop=JSON.parse(localStorage.getItem(key));
+  Object.keys(crop).forEach(k=>{ if(document.getElementById(k)) document.getElementById(k).value=crop[k]; });
+  renderQRCode({id:crop.id,farmer:crop.farmer});
+  currentCrop=crop;
+  showCard('generatorCard');
+}
+
+// Event listeners
+document.getElementById("loginBtn").addEventListener("click",loginFarmer);
+document.getElementById("createBtn").addEventListener("click",createAccount);
+document.getElementById("logoutBtn").addEventListener("click",logoutFarmer);
+document.getElementById("generateQRBtn").addEventListener("click",generateQR);
+document.getElementById("startScanBtn").addEventListener("click",startScanner);
+document.getElementById("stopScanBtn").addEventListener("click",stopScanner);
+document.getElementById("verifyCropBtn").addEventListener("click",verifyCrop);
+</script>
+</body>
+</html>
